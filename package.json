@@ -1,0 +1,26 @@
+{
+  "name": "choice-game",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types --test src/game/engine.test.ts",
+    "cap:sync": "npm run build && cap sync"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
+    "@types/node": "^26.6.5",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
+    "@fontsource/noto-sans-kr": "^5.3.1",
+    "@fontsource/noto-serif-kr": "^5.3.1"
+  }
+}

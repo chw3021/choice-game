@@ -1,0 +1,66 @@
+name: Mobile (Android APK · iOS 빌드 검증)
+
+# v* 태그 푸시 시 APK를 Release에 첨부합니다. Actions 탭에서 수동 실행도 가능합니다.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - run: npm run build && npx cap sync android
+      - name: 디버그 APK 빌드
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: choice-game-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Release에 APK 첨부
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk "choice-game-${GITHUB_REF_NAME}.apk"
+          gh release create "$GITHUB_REF_NAME" "choice-game-${GITHUB_REF_NAME}.apk" --generate-notes
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build && npx cap sync ios
+      - name: 시뮬레이터용 빌드 (서명 없음)
+        working-directory: ios/App
+        run: >
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug
+          -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+      - name: 시뮬레이터 앱 압축
+        run: cd ios/App/build/Build/Products/Debug-iphonesimulator && zip -qr "$GITHUB_WORKSPACE/choice-game-ios-simulator.zip" App.app
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: choice-game-ios-simulator
+          path: choice-game-ios-simulator.zip

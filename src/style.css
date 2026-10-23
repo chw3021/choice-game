@@ -1,0 +1,229 @@
+:root {
+  color-scheme: dark;
+  background: #0a0a0a;
+  font-family: 'Noto Sans KR', sans-serif;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 2px solid #c8a84b;
+  outline-offset: 2px;
+}
+
+#app {
+  max-width: 430px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  background: #0a0a0a;
+}
+
+/* 장면 삽화: 위쪽 오버레이와 아래쪽 페이드로 본문과 자연스럽게 이어짐 */
+.art {
+  position: relative;
+  flex-shrink: 0;
+  height: 405px;
+  padding-top: 44px;
+  overflow: hidden;
+}
+
+.art img {
+  display: block;
+  width: calc(100% - 78px);
+  height: 368px;
+  margin: 0 auto;
+  object-fit: cover;
+}
+
+.art::before,
+.art::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.art::before {
+  top: 0;
+  height: 220px;
+  background: linear-gradient(rgba(10, 10, 10, 0.93), rgba(10, 10, 10, 0));
+}
+
+.art::after {
+  top: 245px;
+  height: 180px;
+  background: linear-gradient(rgba(10, 10, 10, 0), rgba(10, 10, 10, 0.94) 50%, #0a0a0a);
+}
+
+.story {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 18px;
+  padding: 24px 20px 0;
+}
+
+.art + .story {
+  padding-top: 0;
+}
+
+.narration {
+  color: #b8a68f;
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.note {
+  font-size: 15px;
+}
+
+.check {
+  font-size: 12px;
+}
+
+.check.ok {
+  color: #c8a84b;
+}
+
+.check.fail {
+  color: #a0574a;
+}
+
+.ending {
+  font-family: 'Noto Serif KR', serif;
+  font-weight: 500;
+  font-size: 22px;
+  color: #e0d8c8;
+}
+
+.line {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.speaker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.speaker i {
+  width: 2px;
+  height: 14px;
+  background: #8c7355;
+}
+
+.speaker b {
+  color: #8c7355;
+  font-size: 14px;
+}
+
+.speaker span {
+  color: #4a4640;
+  font-size: 11px;
+}
+
+.line p {
+  font-family: 'Noto Serif KR', serif;
+  font-weight: 500;
+  font-size: 17px;
+  line-height: 30px;
+  color: #e0d8c8;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 14px;
+  color: #c8c0b0;
+  background: #111;
+  border: 1px solid #282828;
+  border-radius: 6px;
+}
+
+.choice span {
+  flex: 1;
+}
+
+.choice.trait {
+  color: #c8a84b;
+  background: #1c150d;
+  border-color: #7a5c2a;
+}
+
+.choice:active {
+  filter: brightness(1.3);
+}
+
+/* 하단 상태 바: 탭하면 수치 상세 표시. 아래 16px은 디자인대로 화면 밖으로 잘림 */
+.status {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 18px;
+  padding: 21px 20px calc(18px + env(safe-area-inset-bottom));
+  border: 0;
+  background: url('./assets/bottom-bar.svg') top / 100% calc(100% + 16px) no-repeat;
+  font-size: 14px;
+  color: #c8c0b0;
+  text-align: center;
+}
+
+.status .handle {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.status span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status .active {
+  font-weight: 700;
+  color: #fff;
+}
+
+.status small {
+  display: none;
+  font-size: 11px;
+  font-weight: 400;
+  color: #6a645a;
+}
+
+.status.open small {
+  display: block;
+}
