@@ -43,9 +43,12 @@ const face = (n: number) =>
 
 function load(): GameState | undefined {
   try {
-    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null') as GameState | null
-    // 스토리 수정으로 저장된 장면이 사라졌으면 새 게임으로 시작. 아이템 도입 전 저장은 빈 소지품으로 이어간다
-    return saved && scenes[saved.sceneId] ? { ...saved, items: saved.items ?? [] } : undefined
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null') as (GameState & { modifier?: number }) | null
+    // 스토리 수정으로 저장된 장면이 사라졌으면 새 게임으로 시작. 아이템 도입 전 저장은 빈 소지품으로,
+    // 출처별 보정 도입 전 저장은 합계 보정치 하나로 이어간다
+    if (!saved || !scenes[saved.sceneId]) return undefined
+    const { modifier, ...rest } = saved
+    return { ...rest, items: saved.items ?? [], mods: saved.mods ?? (modifier ? { 보정: modifier } : {}) }
   } catch {
     return undefined
   }
@@ -72,7 +75,13 @@ function renderDice(c: CheckResult): string {
   return `<button class="dice-overlay" data-dice aria-live="polite">
     <span class="dice-title">판정 · 목표 ${c.target}</span>
     <span class="dice">${c.dice.map(() => `<span class="die">${face(1)}</span>`).join('')}</span>
-    ${renderCheck(c)}
+    <span class="breakdown">
+      <span><span>주사위 굴림</span><b>${c.dice[0] + c.dice[1]}</b></span>
+      ${c.parts
+        .map(p => `<span><span>${p.label}</span><b class="${p.value > 0 ? 'up' : 'down'}">${p.value > 0 ? '+' : ''}${p.value}</b></span>`)
+        .join('')}
+      <span class="check ${c.success ? 'ok' : 'fail'}">판정 ${c.success ? '성공' : '실패'} ${c.total}!</span>
+    </span>
     <span class="dice-hint">화면을 눌러 계속하기</span>
   </button>`
 }
@@ -238,7 +247,7 @@ app.addEventListener('click', e => {
     lastCheck = undefined
   } else {
     const choice = visibleChoices(scenes[state.sceneId], state)[Number(btn.dataset.i)]
-    const result = choose(state, choice, scenes)
+    const result = choose(state, choice, scenes, Math.random, items)
     state = result.state
     lastCheck = result.check
     diceOpen = Boolean(result.check)

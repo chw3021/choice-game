@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { choose, newGame, visibleChoices, type GameState } from './engine.ts'
-import { scenes, START, START_ITEMS, START_STATS } from './story.ts'
+import { items, scenes, START, START_ITEMS, START_STATS } from './story.ts'
 
 // rng 값 r → 주사위 눈 1 + floor(r * 6)
 const roll = (...values: number[]) => () => values.shift()!
@@ -38,10 +38,45 @@ test('시작 장면에서 모든 장면(엔딩 포함)에 도달할 수 있다',
 test('공성 장면 진입 효과(공포 -1)가 적용되고, 악몽 난이도는 보정치 -1이 추가된다', () => {
   const s = newGame(scenes, START, START_STATS)
   const [normal, nightmare] = scenes[START].choices
-  assert.equal(choose(s, normal, scenes).state.modifier, -1)
+  assert.deepEqual(choose(s, normal, scenes).state.mods, { 공포: -1 })
   const hard = choose(s, nightmare, scenes).state
-  assert.equal(hard.modifier, -2)
+  assert.deepEqual(hard.mods, { '악몽 난이도': -1, 공포: -1 })
   assert.ok(hard.flags.includes('nightmare'))
+})
+
+test('같은 이름 보정치는 합산되고 0이 되면 사라진다 (공성 영웅: 공포 -1 + 1)', () => {
+  const s = newGame(scenes, 'siege', START_STATS)
+  const win = choose(s, scenes.siege.choices[0], scenes, roll(SIX, SIX)).state
+  assert.deepEqual(win.mods, {})
+})
+
+test('판정 보정치는 아이템 → 상태치 구간 → 이야기 보정 순으로 출처별 내역이 남는다', () => {
+  const s = newGame(scenes, 'siege', START_STATS, START_ITEMS)
+  const brave = scenes.siege.choices[0]
+  const check = choose(s, brave, scenes, roll(ONE, SIX), items).check!
+  assert.deepEqual(check.parts, [
+    { label: '녹슨 장검', value: 1 },
+    { label: '혈기왕성', value: 2 },
+    { label: '공포', value: -1 },
+  ])
+  assert.equal(check.modifier, 2)
+  assert.equal(check.total, 1 + 6 + 2)
+
+  // 상태치 구간 보정: 0-2 → -1, 3-5 → 0(표시 안 함). 체력 판정이 아닌 아이템 보정은 붙지 않는다
+  const weak = { ...s, stats: { ...s.stats, hp: 1, mind: 4 } }
+  assert.deepEqual(choose(weak, brave, scenes, roll(ONE, ONE), items).check!.parts.map(p => p.label), [
+    '녹슨 장검',
+    '빈사',
+    '공포',
+  ])
+  const sneak = scenes.crossroads.choices[0]
+  assert.deepEqual(choose(weak, sneak, scenes, roll(ONE, ONE), items).check!.parts.map(p => p.label), ['공포'])
+})
+
+test('모든 판정 선택지는 사용할 상태치가 지정되어 있다', () => {
+  for (const scene of Object.values(scenes)) {
+    for (const c of scene.choices) if (c.target !== undefined) assert.ok(c.stat, `${scene.id}: ${c.text}`)
+  }
 })
 
 test('판정: 2d6 + 보정치가 목표 이상이면 성공 장면, 아니면 실패 장면', () => {
@@ -49,7 +84,17 @@ test('판정: 2d6 + 보정치가 목표 이상이면 성공 장면, 아니면 �
   const brave = scenes.siege.choices[0]
 
   const win = choose(s, brave, scenes, roll(SIX, SIX))
-  assert.deepEqual(win.check, { dice: [6, 6], modifier: -1, total: 11, target: 6, success: true })
+  assert.deepEqual(win.check, {
+    dice: [6, 6],
+    parts: [
+      { label: '혈기왕성', value: 2 },
+      { label: '공포', value: -1 },
+    ],
+    modifier: 1,
+    total: 13,
+    target: 6,
+    success: true,
+  })
   assert.equal(win.state.sceneId, 'siege-hero')
   assert.ok(win.state.flags.includes('people-siege'))
   assert.equal(win.state.successes, 1)

@@ -434,7 +434,38 @@ button:focus-visible {
   background: #c8a84b;
 }
 
-.dice-overlay .check {
+.breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 180px;
+  font-size: 14px;
+  color: #a09888;
+}
+
+.breakdown > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.breakdown b {
+  color: #e0d8c8;
+}
+
+.breakdown b.up {
+  color: #c8a84b;
+}
+
+.breakdown b.down {
+  color: #a0574a;
+}
+
+.breakdown .check {
+  justify-content: center;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid #2a2218;
   font-size: 15px;
   font-weight: 700;
 }
@@ -444,13 +475,13 @@ button:focus-visible {
   color: #6a645a;
 }
 
-.dice-overlay .check,
+.breakdown,
 .dice-hint {
   opacity: 0;
   transition: opacity 0.3s;
 }
 
-.dice-overlay.done .check,
+.dice-overlay.done .breakdown,
 .dice-overlay.done .dice-hint {
   opacity: 1;
 }

@@ -8,7 +8,11 @@ export const START_STATS: Stats = { hp: 8, mind: 8, hygiene: 6, money: 2 }
 export const START_ITEMS = ['rusty-sword', 'gambeson']
 
 export const items: Record<string, Item> = {
-  'rusty-sword': { name: '녹슨 장검', desc: '요새 병기고에서 받은 낡은 검. 날이 무디다.' },
+  'rusty-sword': {
+    name: '녹슨 장검',
+    desc: '요새 병기고에서 받은 낡은 검. 날이 무디다. 체력 판정 +1',
+    bonus: { stat: 'hp', value: 1 },
+  },
   gambeson: { name: '누빈 갑옷', desc: '천을 겹겹이 누빈 경갑옷. 화살 한두 발은 버틴다.' },
   'royal-doc': { name: '왕실 비밀문서', desc: '왕실이 역병의 발생지를 숨기고 발굴을 계속했다는 증거.' },
   'church-secret': { name: '교회의 봉인된 기록', desc: '역병 이전에 작성된 치료제 제조법과 배합 비율.' },
@@ -33,13 +37,13 @@ const list: Scene[] = [
     ],
     choices: [
       { text: '일반 난이도로 시작한다', next: 'siege' },
-      { trait: '악몽', text: '악몽 난이도로 시작한다', next: 'siege', effects: { flags: ['nightmare'], modifier: -1 } },
+      { trait: '악몽', text: '악몽 난이도로 시작한다', next: 'siege', effects: { flags: ['nightmare'], mods: { '악몽 난이도': -1 } } },
     ],
   },
   {
     id: 'siege',
     image: 'battle',
-    effects: { modifier: -1 },
+    effects: { mods: { 공포: -1 } },
     blocks: [
       {
         kind: 'narration',
@@ -62,6 +66,7 @@ const list: Scene[] = [
         trait: '용감함',
         text: '성문을 열고 홀로 군대와 맞선다',
         target: 6,
+        stat: 'hp',
         next: 'siege-hero',
         failNext: 'siege-wounded',
         effects: { flags: ['people-siege'] },
@@ -69,6 +74,7 @@ const list: Scene[] = [
       {
         text: '남은 주민들과 성문을 몸으로 막는다',
         target: 2,
+        stat: 'hp',
         next: 'siege-hold',
         failNext: 'siege-wounded',
         effects: { flags: ['people-siege'] },
@@ -78,7 +84,7 @@ const list: Scene[] = [
   },
   {
     id: 'siege-hero',
-    effects: { stats: { hp: -2 }, modifier: 1 },
+    effects: { stats: { hp: -2 }, mods: { 공포: 1 } },
     blocks: [
       {
         kind: 'narration',
@@ -125,8 +131,8 @@ const list: Scene[] = [
       },
     ],
     choices: [
-      { text: '왕궁 기록보관소에 숨어든다', target: 7, next: 'royal-doc', failNext: 'caught', excludes: ['royal-doc'] },
-      { text: '수도원 지하를 조사한다', target: 7, next: 'church-secret', failNext: 'caught', excludes: ['church-secret'] },
+      { text: '왕궁 기록보관소에 숨어든다', target: 7, stat: 'mind', next: 'royal-doc', failNext: 'caught', excludes: ['royal-doc'] },
+      { text: '수도원 지하를 조사한다', target: 7, stat: 'mind', next: 'church-secret', failNext: 'caught', excludes: ['church-secret'] },
       { text: '역병 구역을 찾아간다', next: 'plague-ward', excludes: ['met-doctor'] },
       { text: '곡물 창고 앞 소란으로 향한다', next: 'granary', excludes: ['granary-done'] },
       { text: '투기장에 나간다', next: 'arena-1', excludes: ['arena-done'] },
@@ -189,6 +195,7 @@ const list: Scene[] = [
       {
         text: '역병의사를 도와 환자들을 돌본다',
         target: 6,
+        stat: 'hygiene',
         next: 'ward-saved',
         failNext: 'ward-failed',
         effects: { flags: ['people-ward'] },
@@ -229,6 +236,7 @@ const list: Scene[] = [
         trait: '설득',
         text: '양쪽 사이에 서서 곡물을 나누자고 설득한다',
         target: 7,
+        stat: 'mind',
         next: 'granary-calm',
         failNext: 'granary-riot',
         effects: { flags: ['people-granary'] },
@@ -264,7 +272,7 @@ const list: Scene[] = [
       },
     ],
     choices: [
-      { text: '첫 상대와 맞선다', target: 6, next: 'arena-2', failNext: 'arena-lost' },
+      { text: '첫 상대와 맞선다', target: 6, stat: 'hp', next: 'arena-2', failNext: 'arena-lost' },
       { text: '돌아간다', next: 'crossroads' },
     ],
   },
@@ -274,7 +282,7 @@ const list: Scene[] = [
     blocks: [
       { kind: 'narration', text: '첫 상대가 쓰러졌다. 관중의 함성이 커진다. 다음 상대는 전직 용병이다.' },
     ],
-    choices: [{ text: '용병과 맞선다', target: 8, next: 'arena-3', failNext: 'arena-lost' }],
+    choices: [{ text: '용병과 맞선다', target: 8, stat: 'hp', next: 'arena-3', failNext: 'arena-lost' }],
   },
   {
     id: 'arena-3',
@@ -288,7 +296,7 @@ const list: Scene[] = [
         text: '"여기까지 온 건 칭찬해 주지. 하지만 여기서 끝이다."',
       },
     ],
-    choices: [{ trait: '용감함', text: '챔피언과 맞선다', target: 9, next: 'end-arena', failNext: 'arena-lost' }],
+    choices: [{ trait: '용감함', text: '챔피언과 맞선다', target: 9, stat: 'hp', next: 'end-arena', failNext: 'arena-lost' }],
   },
   {
     id: 'arena-lost',
@@ -306,7 +314,7 @@ const list: Scene[] = [
       },
     ],
     choices: [
-      { trait: '용감함', text: '역병의 근원과 맞선다', target: 10, next: 'end-nightmare', failNext: 'end-dead' },
+      { trait: '용감함', text: '역병의 근원과 맞선다', target: 10, stat: 'mind', next: 'end-nightmare', failNext: 'end-dead' },
       { text: '물러난다', next: 'crossroads' },
     ],
   },
@@ -358,8 +366,8 @@ const list: Scene[] = [
       },
     ],
     choices: [
-      { text: '뒷골목으로 달아난다', target: 7, next: 'end-royal-power', failNext: 'end-dead' },
-      { trait: '용감함', text: '추격자들을 기다렸다가 맞선다', target: 8, next: 'end-royal-power', failNext: 'end-dead' },
+      { text: '뒷골목으로 달아난다', target: 7, stat: 'hp', next: 'end-royal-power', failNext: 'end-dead' },
+      { trait: '용감함', text: '추격자들을 기다렸다가 맞선다', target: 8, stat: 'hp', next: 'end-royal-power', failNext: 'end-dead' },
     ],
   },
   // 역병의사에게 치료법 전달: 왕국과 교회 양쪽의 추격을 두 번 연속 버텨야 한다
@@ -372,14 +380,14 @@ const list: Scene[] = [
         text: '역병의사에게 치료법을 넘겼다. 이제 왕국과 교회 모두가 너를 쫓는다. 살아남아야 한다.',
       },
     ],
-    choices: [{ text: '하수도로 숨어든다', target: 8, next: 'doctor-chase-2', failNext: 'end-dead' }],
+    choices: [{ text: '하수도로 숨어든다', target: 8, stat: 'hygiene', next: 'doctor-chase-2', failNext: 'end-dead' }],
   },
   {
     id: 'doctor-chase-2',
     blocks: [
       { kind: 'narration', text: '하수도를 빠져나오자 왕국 기사단과 교회 심문관이 양쪽에서 길을 막았다.' },
     ],
-    choices: [{ trait: '용감함', text: '포위를 뚫는다', target: 9, next: 'end-doctor', failNext: 'end-dead' }],
+    choices: [{ trait: '용감함', text: '포위를 뚫는다', target: 9, stat: 'hp', next: 'end-doctor', failNext: 'end-dead' }],
   },
   {
     id: 'end-royal-loyal',
