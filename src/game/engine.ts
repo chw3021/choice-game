@@ -19,6 +19,11 @@ const STAT_LABELS: Record<StatKey, [string, string, string, string]> = {
   money: ['빈곤함', '넉넉지 않음', '넉넉함', '부유함'],
 }
 
+export interface Item {
+  name: string
+  desc: string
+}
+
 export type Block =
   | { kind: 'narration'; text: string; note?: string }
   | { kind: 'line'; speaker: string; tag?: string; text: string }
@@ -28,6 +33,8 @@ export interface Effects {
   /** 판정 보정치 변화량 (예: 공포 -1) */
   modifier?: number
   flags?: string[]
+  /** 획득 아이템 id (story.ts의 items 키) */
+  items?: string[]
 }
 
 export interface Choice {
@@ -39,10 +46,12 @@ export interface Choice {
   next: string
   /** 판정 실패 시 이동할 장면. 없으면 next */
   failNext?: string
-  /** 모두 보유해야 노출 */
+  /** 모두 보유해야 노출 (플래그 또는 아이템 id) */
   requires?: string[]
-  /** 하나라도 보유하면 숨김 */
+  /** 하나라도 보유하면 숨김 (플래그 또는 아이템 id) */
   excludes?: string[]
+  /** of 중 count개 이상 보유해야 노출 (예: 백성 인카운터 2회 이상 성공) */
+  minOf?: { of: string[]; count: number }
   /** 판정 성공(또는 판정 없음) 시 적용 */
   effects?: Effects
 }
@@ -64,6 +73,8 @@ export interface GameState {
   stats: Stats
   modifier: number
   flags: string[]
+  /** 보유 아이템 id. 획득 순서대로 */
+  items: string[]
   /** 성공한 판정 수 (진 엔딩 조건 등에 사용) */
   successes: number
   /** 마지막으로 변한 상태치. 하단 바에서 강조 */
@@ -97,7 +108,8 @@ function applyEffects(state: GameState, effects: Effects | undefined): GameState
     }
   }
   const flags = [...new Set([...state.flags, ...(effects.flags ?? [])])]
-  return { ...state, stats, flags, lastStat, modifier: state.modifier + (effects.modifier ?? 0) }
+  const items = [...new Set([...state.items, ...(effects.items ?? [])])]
+  return { ...state, stats, flags, items, lastStat, modifier: state.modifier + (effects.modifier ?? 0) }
 }
 
 function enter(state: GameState, scenes: Record<string, Scene>, sceneId: string): GameState {
@@ -106,13 +118,23 @@ function enter(state: GameState, scenes: Record<string, Scene>, sceneId: string)
   return applyEffects({ ...state, sceneId }, scene.effects)
 }
 
-export function newGame(scenes: Record<string, Scene>, startId: string, stats: Stats): GameState {
-  return enter({ sceneId: startId, stats, modifier: 0, flags: [], successes: 0, lastStat: 'hp' }, scenes, startId)
+export function newGame(
+  scenes: Record<string, Scene>,
+  startId: string,
+  stats: Stats,
+  items: string[] = [],
+): GameState {
+  return enter({ sceneId: startId, stats, modifier: 0, flags: [], items, successes: 0, lastStat: 'hp' }, scenes, startId)
 }
 
 export function visibleChoices(scene: Scene, state: GameState): Choice[] {
-  const has = (f: string) => state.flags.includes(f)
-  return scene.choices.filter(c => (c.requires ?? []).every(has) && !(c.excludes ?? []).some(has))
+  const has = (f: string) => state.flags.includes(f) || state.items.includes(f)
+  return scene.choices.filter(
+    c =>
+      (c.requires ?? []).every(has) &&
+      !(c.excludes ?? []).some(has) &&
+      (!c.minOf || c.minOf.of.filter(has).length >= c.minOf.count),
+  )
 }
 
 const d6 = (rng: () => number) => 1 + Math.floor(rng() * 6)

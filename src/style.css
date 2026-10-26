@@ -2,6 +2,8 @@
   color-scheme: dark;
   background: #0a0a0a;
   font-family: 'Noto Sans KR', sans-serif;
+  /* Figma 자동 행간(약 1.2)에 맞춤. 브라우저 normal은 Noto Sans KR에서 약 1.45라 레이아웃이 밀린다 */
+  line-height: 1.2;
   word-break: keep-all;
   overflow-wrap: break-word;
   -webkit-text-size-adjust: 100%;
@@ -11,6 +13,11 @@
 * {
   box-sizing: border-box;
   margin: 0;
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
 }
 
 button {
@@ -26,18 +33,21 @@ button:focus-visible {
 
 #app {
   max-width: 430px;
-  min-height: 100dvh;
+  height: 100dvh;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   padding-top: env(safe-area-inset-top);
   background: #0a0a0a;
+  /* 닫힌 하단 시트 본문이 화면 아래로 걸쳐 있으므로 잘라낸다 */
+  overflow: hidden;
 }
 
-/* 장면 삽화: 위쪽 오버레이와 아래쪽 페이드로 본문과 자연스럽게 이어짐 */
+/* 장면 삽화: 위쪽 오버레이와 아래쪽 페이드로 본문과 자연스럽게 이어짐.
+   설명문이 최소 높이를 못 채우는 작은 화면에서는 삽화 아래쪽이 잘린다 */
 .art {
   position: relative;
-  flex-shrink: 0;
+  min-height: 0;
   height: 405px;
   padding-top: 44px;
   overflow: hidden;
@@ -46,7 +56,8 @@ button:focus-visible {
 .art img {
   display: block;
   width: calc(100% - 78px);
-  height: 368px;
+  /* 405px일 때 368px(Figma). 삽화가 줄어들면 같이 줄고 가운데 기준으로 잘린다 */
+  height: calc(100% + 7px);
   margin: 0 auto;
   object-fit: cover;
 }
@@ -60,15 +71,16 @@ button:focus-visible {
   pointer-events: none;
 }
 
+/* 오버레이·페이드도 405px 기준 Figma 값(220px, 180px, -20px)을 비율로 유지한다 */
 .art::before {
   top: 0;
-  height: 220px;
+  height: calc(100% * 220 / 405);
   background: linear-gradient(rgba(10, 10, 10, 0.93), rgba(10, 10, 10, 0));
 }
 
 .art::after {
-  top: 245px;
-  height: 180px;
+  bottom: calc(100% * -20 / 405);
+  height: calc(100% * 180 / 405);
   background: linear-gradient(rgba(10, 10, 10, 0), rgba(10, 10, 10, 0.94) 50%, #0a0a0a);
 }
 
@@ -85,6 +97,41 @@ button:focus-visible {
   padding-top: 0;
 }
 
+/* 설명문 영역: 남는 높이만 차지하고 넘치면 영역 전체가 한 번에 스크롤된다. 짧은 글은 선택지 쪽(아래)에 붙는다 */
+.text {
+  /* 0%가 아닌 0px: 글 길이가 아니라 min-height만 부모 최소 높이에 반영되게 한다 */
+  flex: 1 1 0px;
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  user-select: none;
+  /* 위/아래로 가려진 글이 있을 때만 그쪽 가장자리를 흐리게 한다 (main.ts의 updateFade) */
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  -webkit-mask-image: linear-gradient(transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
+  mask-image: linear-gradient(transparent, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent);
+}
+
+/* 타이핑 효과: 아직 나오지 않은 글자 (main.ts의 typeText) */
+::highlight(untyped) {
+  color: transparent;
+}
+
+.text.fade-top {
+  --fade-top: 32px;
+}
+
+.text.fade-bottom {
+  --fade-bottom: 32px;
+}
+
+.text > :first-child {
+  margin-top: auto;
+}
+
 .narration {
   color: #b8a68f;
   font-size: 12px;
@@ -93,6 +140,7 @@ button:focus-visible {
 
 .note {
   font-size: 15px;
+  vertical-align: top;
 }
 
 .check {
@@ -154,6 +202,18 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transition: opacity 0.3s;
+}
+
+/* 타이핑이 끝날 때까지 숨긴다. 자리는 유지해 레이아웃이 움직이지 않는다 */
+.choices.pending {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 나타나는 0.3초 동안에도 클릭을 막는다. 거의 투명한 버튼이 눌리는 것을 방지 */
+.choices.revealing {
+  pointer-events: none;
 }
 
 .choice {
@@ -184,28 +244,56 @@ button:focus-visible {
   filter: brightness(1.3);
 }
 
-/* 하단 상태 바: 탭하면 수치 상세 표시. 아래 16px은 디자인대로 화면 밖으로 잘림 */
+/* 하단 시트: 자리는 바 높이(55px)만 차지하고, 패널(바 + 본문)은 아래로 걸쳐 있다가
+   열리면 본문 높이만큼 올라온다. 드래그 중에는 main.ts가 transform을 직접 지정한다 */
+.sheet {
+  position: relative;
+  z-index: 5;
+  flex-shrink: 0;
+  height: calc(55px + env(safe-area-inset-bottom));
+  margin-top: 24px;
+}
+
+.sheet-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #111;
+  border: 1px solid #282828;
+  border-bottom: 0;
+  border-radius: 20px 20px 0 0;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.sheet.open .sheet-panel {
+  transform: translateY(calc(-100% + 55px + env(safe-area-inset-bottom)));
+}
+
+/* 테두리 1px만큼 위 여백을 줄여 Figma 위치(글자 top 21px)를 유지한다 */
 .status {
-  position: sticky;
-  bottom: 0;
+  position: relative;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  margin-top: 18px;
-  padding: 21px 20px calc(18px + env(safe-area-inset-bottom));
+  width: 100%;
+  padding: 20px 20px calc(18px + env(safe-area-inset-bottom));
   border: 0;
-  background: url('./assets/bottom-bar.svg') top / 100% calc(100% + 16px) no-repeat;
+  background: none;
   font-size: 14px;
+  line-height: 16px;
   color: #c8c0b0;
   text-align: center;
+  touch-action: none;
 }
 
 .status .handle {
   position: absolute;
-  top: 6px;
+  top: 5px;
   left: 50%;
   transform: translateX(-50%);
 }
 
+/* 굵기는 main.ts에서 상태치에 비례해 지정한다 */
 .status span {
   display: flex;
   flex-direction: column;
@@ -213,7 +301,6 @@ button:focus-visible {
 }
 
 .status .active {
-  font-weight: 700;
   color: #fff;
 }
 
@@ -224,6 +311,175 @@ button:focus-visible {
   color: #6a645a;
 }
 
-.status.open small {
+.sheet.open .status small {
   display: block;
+}
+
+/* 열리면 아래 안전 영역은 시트 본문이 맡으므로 바 아래 여백을 줄여 소지품과 붙인다 */
+.sheet.open .status {
+  padding-bottom: 10px;
+}
+
+.sheet-body {
+  max-height: min(60dvh, 480px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 20px calc(24px + env(safe-area-inset-bottom));
+}
+
+.sheet-body ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: #c8c0b0;
+}
+
+.bag li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  background: #0a0a0a;
+  border-radius: 6px;
+}
+
+.sheet-body li b {
+  color: #e0d8c8;
+}
+
+.sheet-body li small,
+.sheet-body li em {
+  font-size: 11px;
+  font-style: normal;
+  color: #6a645a;
+}
+
+/* Figma 기준(402x960)보다 낮은 화면: 여백과 선택지 높이를 줄이고, 삽화를 더 줄여 설명문 높이를 확보한다 */
+@media (max-height: 940px) {
+  .art {
+    padding-top: 16px;
+  }
+
+  .story,
+  .text {
+    gap: 12px;
+  }
+
+  .text {
+    min-height: max(135px, 34dvh);
+  }
+
+  .choice {
+    min-height: 48px;
+  }
+
+  .sheet {
+    margin-top: 12px;
+  }
+}
+
+/* 판정 오버레이: 주사위가 굴러간 뒤(.done) 결과와 안내 문구가 나타난다 */
+.dice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  border: 0;
+  /* 불투명: 뒤에 이미 그려진 결과 장면이 비치면 판정 결과가 미리 드러난다 */
+  background: #0a0a0a;
+}
+
+.dice-title {
+  font-family: 'Noto Serif KR', serif;
+  font-weight: 500;
+  font-size: 17px;
+  color: #e0d8c8;
+}
+
+.dice {
+  display: flex;
+  gap: 20px;
+}
+
+.die {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 64px;
+  height: 64px;
+  padding: 10px;
+  background: #1c150d;
+  border: 1px solid #7a5c2a;
+  border-radius: 10px;
+  animation: tumble 0.32s linear infinite;
+}
+
+.die + .die {
+  animation-direction: reverse;
+}
+
+.die i {
+  place-self: center;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.die i.on {
+  background: #c8a84b;
+}
+
+.dice-overlay .check {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.dice-hint {
+  font-size: 12px;
+  color: #6a645a;
+}
+
+.dice-overlay .check,
+.dice-hint {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.dice-overlay.done .check,
+.dice-overlay.done .dice-hint {
+  opacity: 1;
+}
+
+.dice-overlay.done .die {
+  animation: land 0.35s ease-out;
+}
+
+@keyframes tumble {
+  50% {
+    transform: translateY(-10px) rotate(180deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes land {
+  from {
+    transform: scale(1.25);
+  }
+  60% {
+    transform: scale(0.92);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .die,
+  .dice-overlay.done .die {
+    animation: none;
+  }
 }
