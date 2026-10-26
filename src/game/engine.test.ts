@@ -1,7 +1,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import { choose, newGame, visibleChoices, type GameState } from './engine.ts'
 import { items, scenes, START, START_ITEMS, START_STATS } from './story.ts'
+
+test('image를 따로 지정하지 않은 장면은 장면 id와 같은 이름의 삽화가 있다', () => {
+  const missing = Object.values(scenes).filter(
+    s => !s.image && !existsSync(new URL(`../assets/art/${s.id}.jpg`, import.meta.url)),
+  )
+  assert.deepEqual(missing.map(s => s.id), [])
+})
 
 // rng 값 r → 주사위 눈 1 + floor(r * 6)
 const roll = (...values: number[]) => () => values.shift()!

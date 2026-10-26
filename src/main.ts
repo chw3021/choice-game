@@ -22,14 +22,34 @@ import {
   type Block,
   type CheckResult,
   type GameState,
+  type Scene,
 } from './game/engine.ts'
 import { START, START_ITEMS, START_STATS, items, scenes } from './game/story.ts'
 
 const SAVE_KEY = 'choice-game:save'
+const SETTINGS_KEY = 'choice-game:settings'
 const images: Record<string, string> = { battle }
+// 화면·장면 삽화. 파일 이름이 장면 id(또는 title, loading, menu, settings)와 같다
+const art = import.meta.glob<string>('./assets/art/*.jpg', { eager: true, import: 'default' })
+const artOf = (name: string) => art[`./assets/art/${name}.jpg`]
+const sceneArt = (s: Scene) => (s.image ? images[s.image] : artOf(s.id))
 const app = document.querySelector<HTMLDivElement>('#app')!
 
+// 글자당 ms. 0이면 타이핑 없이 바로 보여준다
+const SPEEDS: [string, number][] = [
+  ['느림', 40],
+  ['보통', 20],
+  ['빠름', 10],
+  ['즉시', 0],
+]
+interface Settings {
+  speed: number
+  diceMotion: boolean
+}
+
 let state = load() ?? newGame(scenes, START, START_STATS, START_ITEMS)
+let settings: Settings = { speed: 20, diceMotion: true, ...loadSettings() }
+let screen: 'loading' | 'title' | 'game' = 'loading'
 let lastCheck: CheckResult | undefined
 let statsOpen = false
 let sheetDragged = false
@@ -54,6 +74,112 @@ function load(): GameState | undefined {
   }
 }
 
+function loadSettings(): Partial<Settings> {
+  try {
+    return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') as Partial<Settings>
+  } catch {
+    return {}
+  }
+}
+
+const ICONS = {
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  settings:
+    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+}
+const LABELS = { menu: '메뉴', settings: '설정' }
+
+function renderHud(kinds: (keyof typeof ICONS)[]): string {
+  return `<nav class="hud">${kinds
+    .map(
+      k => `<button data-open="${k}" aria-label="${LABELS[k]}">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>
+      </button>`,
+    )
+    .join('')}</nav>`
+}
+
+function renderLoading(): string {
+  return `<div class="loading-screen">
+    <img src="${artOf('loading')}" alt="">
+    <p role="status">불러오는 중입니다</p>
+    <span class="loading-bar"><i></i></span>
+  </div>`
+}
+
+function renderTitle(): string {
+  const saved = Boolean(load())
+  return `<div class="title-screen">
+    <img src="${artOf('title')}" alt="">
+    <div class="title-text"><p>역병의 왕국</p><h1>거암세의 음모</h1></div>
+    <div class="title-menu">
+      ${saved ? choiceButton('data-continue', '이어하기', true) : ''}
+      ${choiceButton('data-new', '새로 시작', !saved)}
+    </div>
+  </div>
+  ${renderHud(['settings'])}`
+}
+
+function renderPanel(kind: keyof typeof ICONS): string {
+  const body =
+    kind === 'menu'
+      ? [
+          choiceButton('data-act="close"', '계속하기', true),
+          choiceButton('data-open="settings"', '설정', false),
+          choiceButton('data-act="title"', '메인 화면으로', false),
+        ].join('')
+      : `<div class="setting">텍스트 속도
+          <div class="seg">${SPEEDS.map(
+            ([label, ms]) => `<button data-speed="${ms}" aria-pressed="${settings.speed === ms}">${label}</button>`,
+          ).join('')}</div>
+        </div>
+        <div class="setting">주사위 애니메이션
+          <div class="seg">
+            <button data-motion="1" aria-pressed="${settings.diceMotion}">켜기</button>
+            <button data-motion="0" aria-pressed="${!settings.diceMotion}">끄기</button>
+          </div>
+        </div>
+        ${choiceButton('data-act="reset"', '진행 초기화', false)}
+        ${choiceButton('data-act="close"', '닫기', false)}`
+  return `<div class="panel">
+    <div class="panel-card" role="dialog" aria-modal="true" aria-label="${LABELS[kind]}" tabindex="-1">
+      <img class="panel-art" src="${artOf(kind)}" alt="">
+      <h2>${LABELS[kind]}</h2>
+      ${body}
+    </div>
+  </div>`
+}
+
+// 패널은 화면을 다시 그리지 않고 위에 덧붙인다. 다시 그리면 진행 중인 타이핑·판정 연출이 처음부터 재생된다
+function openPanel(kind?: keyof typeof ICONS) {
+  app.querySelector('.panel')?.remove()
+  if (!kind) return
+  app.insertAdjacentHTML('beforeend', renderPanel(kind))
+  app.querySelector<HTMLElement>('.panel-card')!.focus()
+}
+
+function saveSettings(next: Partial<Settings>) {
+  settings = { ...settings, ...next }
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+  openPanel('settings')
+}
+
+// 폰트와 다음 화면 삽화를 받은 뒤 넘어간다. 금방 끝나도 깜빡이지 않게 최소 0.6초는 보여준다
+function loadInto(next: typeof screen, urls: string[]) {
+  screen = 'loading'
+  render()
+  const decode = (src: string) => {
+    const img = new Image()
+    img.src = src
+    return img.decode().catch(() => undefined)
+  }
+  Promise.all([document.fonts.ready, ...urls.map(decode), new Promise(r => setTimeout(r, 600))]).then(() => {
+    screen = next
+    render()
+  })
+}
+
 function renderBlock(b: Block): string {
   if (b.kind === 'line') {
     return `<div class="line">
@@ -72,7 +198,7 @@ function renderCheck(c: CheckResult): string {
 }
 
 function renderDice(c: CheckResult): string {
-  return `<button class="dice-overlay" data-dice aria-live="polite">
+  return `<button class="dice-overlay${settings.diceMotion ? '' : ' still'}" data-dice aria-live="polite">
     <span class="dice-title">판정 · 목표 ${c.target}</span>
     <span class="dice">${c.dice.map(() => `<span class="die">${face(1)}</span>`).join('')}</span>
     <span class="breakdown">
@@ -90,7 +216,7 @@ function renderDice(c: CheckResult): string {
 function rollDice(c: CheckResult) {
   const overlay = app.querySelector<HTMLElement>('.dice-overlay')!
   const dice = [...overlay.querySelectorAll<HTMLElement>('.die')]
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+  const reduce = !settings.diceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches
   const end = Date.now() + (reduce ? 0 : 900)
   const timer = setInterval(() => {
     const done = Date.now() >= end
@@ -156,7 +282,7 @@ function stopTyping() {
 // 타이핑 중에도 레이아웃이 움직이지 않는다. 다 나올 때까지 선택지는 숨긴다
 function typeText() {
   const text = app.querySelector<HTMLElement>('.text')
-  if (!text || !('highlights' in CSS) || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  if (!text || !settings.speed || !('highlights' in CSS) || matchMedia('(prefers-reduced-motion: reduce)').matches) return
   const nodes: Text[] = []
   const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT)
   while (walker.nextNode()) if (walker.currentNode.nodeValue!.trim()) nodes.push(walker.currentNode as Text)
@@ -183,11 +309,15 @@ function typeText() {
     ch.setEnd(nodes[n], off)
     const over = ch.getBoundingClientRect().bottom - (text.getBoundingClientRect().bottom - 32)
     if (over > 0) text.scrollTop += over
-  }, 20)
+  }, settings.speed)
 }
 
 function render() {
   stopTyping()
+  if (screen !== 'game') {
+    app.innerHTML = screen === 'loading' ? renderLoading() : renderTitle()
+    return
+  }
   const scene = scenes[state.sceneId]
   const choices = visibleChoices(scene, state).map((c, i) =>
     choiceButton(
@@ -198,8 +328,10 @@ function render() {
   )
   if (scene.ending) choices.push(choiceButton('data-restart', '처음부터 다시 하기', false))
 
+  const image = sceneArt(scene)
   app.innerHTML = `
-    ${scene.image ? `<div class="art"><img src="${images[scene.image]}" alt=""></div>` : ''}
+    ${image ? `<div class="art"><img src="${image}" alt=""></div>` : ''}
+    ${renderHud(['menu', 'settings'])}
     <main class="story">
       <div class="text">
         ${lastCheck ? renderCheck(lastCheck) : ''}
@@ -216,6 +348,12 @@ function render() {
   else typeText()
 }
 
+function resetGame() {
+  state = newGame(scenes, START, START_STATS, START_ITEMS)
+  lastCheck = undefined
+  diceOpen = false
+}
+
 function updateFade() {
   const text = app.querySelector<HTMLElement>('.text')
   if (!text) return
@@ -229,8 +367,33 @@ app.addEventListener('click', e => {
     stopTyping()
     return
   }
+  // 패널 바깥(어두운 배경)을 누르면 닫는다
+  if ((e.target as HTMLElement).classList.contains('panel')) return openPanel()
   const btn = (e.target as HTMLElement).closest('button')
   if (!btn) return
+  const { open, act, speed, motion } = btn.dataset
+  if (open) return openPanel(open as keyof typeof ICONS)
+  if (speed !== undefined) return saveSettings({ speed: Number(speed) })
+  if (motion !== undefined) return saveSettings({ diceMotion: motion === '1' })
+  if (act === 'close') return openPanel()
+  if (act === 'title') {
+    screen = 'title'
+    return render()
+  }
+  if (act === 'reset') {
+    if (!confirm('저장된 진행 상황이 모두 삭제됩니다. 계속하시겠습니까?')) return
+    localStorage.removeItem(SAVE_KEY)
+    resetGame()
+    screen = 'title'
+    return render()
+  }
+  if (btn.dataset.continue !== undefined) return loadInto('game', [sceneArt(scenes[state.sceneId])])
+  if (btn.dataset.new !== undefined) {
+    if (load() && !confirm('진행 중인 이야기가 삭제됩니다. 새로 시작하시겠습니까?')) return
+    localStorage.removeItem(SAVE_KEY)
+    resetGame()
+    return loadInto('game', [sceneArt(scenes[START])])
+  }
   if (btn.dataset.dice !== undefined) {
     if (!btn.classList.contains('done')) return
     diceOpen = false
@@ -243,8 +406,7 @@ app.addEventListener('click', e => {
     return
   }
   if (btn.dataset.restart !== undefined) {
-    state = newGame(scenes, START, START_STATS, START_ITEMS)
-    lastCheck = undefined
+    resetGame()
   } else {
     const choice = visibleChoices(scenes[state.sceneId], state)[Number(btn.dataset.i)]
     const result = choose(state, choice, scenes, Math.random, items)
@@ -256,6 +418,8 @@ app.addEventListener('click', e => {
   render()
   window.scrollTo(0, 0)
 })
+
+document.addEventListener('keydown', e => e.key === 'Escape' && openPanel())
 
 // scroll 이벤트는 버블링되지 않으므로 캡처 단계에서 받는다
 app.addEventListener('scroll', updateFade, true)
@@ -310,4 +474,4 @@ app.addEventListener('pointerdown', e => {
   bar.addEventListener('lostpointercapture', up)
 })
 
-render()
+loadInto('title', [artOf('title')])
