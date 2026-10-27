@@ -1,9 +1,6 @@
-import '@fontsource/noto-sans-kr/300.css'
 import '@fontsource/noto-sans-kr/400.css'
 import '@fontsource/noto-sans-kr/500.css'
-import '@fontsource/noto-sans-kr/600.css'
 import '@fontsource/noto-sans-kr/700.css'
-import '@fontsource/noto-sans-kr/800.css'
 import '@fontsource/noto-sans-kr/900.css'
 import '@fontsource/noto-serif-kr/500.css'
 import './style.css'
@@ -18,6 +15,7 @@ import {
   choose,
   newGame,
   statLabel,
+  tier,
   visibleChoices,
   type Block,
   type CheckResult,
@@ -234,8 +232,11 @@ function choiceButton(attr: string, label: string, highlight: boolean): string {
   </button>`
 }
 
-// 상태치 0~10을 굵기 300~900에 비례시킨다 (Noto Sans KR 300~900 로드됨)
-const statWeight = (v: number) => 300 + Math.round((v / STAT_MAX) * 6) * 100
+// 상태 표기 구간(0-2, 3-5, 6-7, 8-10)별 굵기. 14px에서도 단계가 구분되도록 간격을 벌린다
+const STAT_WEIGHTS = [400, 500, 700, 900]
+const statWeight = (v: number) => STAT_WEIGHTS[tier(v)]
+// 상태치 0~10을 색상환 빨강(0)~초록(120)에 비례시킨다
+const statColor = (v: number) => `hsl(${Math.round((v / STAT_MAX) * 120)} 55% 62%)`
 
 function renderSheet(): string {
   const entry = (id: string) => `<b>${items[id].name}</b><small>${items[id].desc}</small>`
@@ -245,7 +246,7 @@ function renderSheet(): string {
       <button class="status" data-status aria-expanded="${statsOpen}" aria-label="상태와 소지품 보기">
         <img class="handle" src="${tabIndicator}" width="69" height="3" alt="">
         ${STAT_KEYS.map(
-          k => `<span class="${k === state.lastStat ? 'active' : ''}" style="font-weight: ${statWeight(state.stats[k])}">
+          k => `<span class="${k === state.lastStat ? 'active' : ''}" style="font-weight: ${statWeight(state.stats[k])}; color: ${statColor(state.stats[k])}">
             ${statLabel(k, state.stats[k])}<small>${STAT_NAMES[k]} ${state.stats[k]}/${STAT_MAX}</small>
           </span>`,
         ).join('')}
@@ -278,21 +279,23 @@ function stopTyping() {
   }
 }
 
+const canType = () =>
+  Boolean(settings.speed) && 'highlights' in CSS && !matchMedia('(prefers-reduced-motion: reduce)').matches
+
 // 본문 글자를 하나씩 드러낸다. 글자는 미리 배치해 두고 아직 안 나온 부분만 투명하게 칠하므로(::highlight)
-// 타이핑 중에도 레이아웃이 움직이지 않는다. 다 나올 때까지 선택지는 숨긴다
+// 타이핑 중에도 레이아웃이 움직이지 않는다. 선택지는 render에서 pending으로 숨긴 채 그리고 다 나오면 드러낸다
 function typeText() {
   const text = app.querySelector<HTMLElement>('.text')
-  if (!text || !settings.speed || !('highlights' in CSS) || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  if (!text || !canType()) return
   const nodes: Text[] = []
   const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT)
   while (walker.nextNode()) if (walker.currentNode.nodeValue!.trim()) nodes.push(walker.currentNode as Text)
-  if (!nodes.length) return
+  if (!nodes.length) return stopTyping()
   const last = nodes[nodes.length - 1]
   const hidden = new Range()
   hidden.setEnd(last, last.length)
   hidden.setStart(nodes[0], 0)
   CSS.highlights.set('untyped', new Highlight(hidden))
-  app.querySelector('.choices')!.classList.add('pending')
   let n = 0
   let off = 0
   typing = setInterval(() => {
@@ -338,7 +341,7 @@ function render() {
         ${scene.ending ? `<h1 class="ending">엔딩 · ${scene.ending}</h1>` : ''}
         ${scene.blocks.map(renderBlock).join('')}
       </div>
-      <div class="choices">${choices.join('')}</div>
+      <div class="choices${!(diceOpen && lastCheck) && canType() ? ' pending' : ''}">${choices.join('')}</div>
     </main>
     ${renderSheet()}
     ${diceOpen && lastCheck ? renderDice(lastCheck) : ''}`

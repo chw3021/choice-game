@@ -22,7 +22,7 @@ const STAT_LABELS: Record<StatKey, [string, string, string, string]> = {
 // 구간별 판정 보정치. 판정에 쓰이는 상태치의 구간에 따라 붙는다
 const STAT_BONUS = [-1, 0, 1, 2]
 
-const tier = (value: number) => (value <= 2 ? 0 : value <= 5 ? 1 : value <= 7 ? 2 : 3)
+export const tier = (value: number) => (value <= 2 ? 0 : value <= 5 ? 1 : value <= 7 ? 2 : 3)
 
 export interface Item {
   name: string

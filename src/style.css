@@ -294,15 +294,16 @@ button:focus-visible {
   transform: translateX(-50%);
 }
 
-/* 굵기는 main.ts에서 상태치에 비례해 지정한다 */
+/* 굵기와 색은 main.ts에서 상태치에 비례해 지정한다 */
 .status span {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
+/* 글자색은 상태치 색을 유지해야 하므로 마지막으로 변한 상태치는 같은 색 번짐으로 강조한다 */
 .status .active {
-  color: #fff;
+  text-shadow: 0 0 8px currentColor;
 }
 
 .status small {
