@@ -25,6 +25,18 @@ const PEASANT_HERO = { of: PEOPLE, count: 2 }
 // 엔딩 본문 중 왕실/교회/양쪽 비밀 분기는 기획 마인드맵(엔딩.xmind) 기준이다.
 // 그 외 연결 장면 문구와 xmind에 본문이 없는 엔딩(외면, 역병의사의 치료제, 역병의 신비, 투기장의 제왕, 죽음)은
 // 임시 초안이다. 기획 확정 시 교체한다.
+
+// 분기 내보내기(scripts/export-xmind.ts)용 플래그 표시 이름. 아이템 이름은 items에서 가져온다
+export const FLAG_NAMES: Record<string, string> = {
+  nightmare: '악몽 난이도',
+  'met-doctor': '역병의사 만남',
+  'granary-done': '곡물 창고 방문',
+  'arena-done': '투기장 참전',
+  'people-siege': '백성 인카운터 성공(공성)',
+  'people-ward': '백성 인카운터 성공(역병 구역)',
+  'people-granary': '백성 인카운터 성공(곡물 창고)',
+}
+
 const list: Scene[] = [
   {
     id: 'difficulty',

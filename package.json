@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "node --experimental-strip-types --test src/game/engine.test.ts",
-    "cap:sync": "npm run build && cap sync"
+    "cap:sync": "npm run build && cap sync",
+    "export:xmind": "node --experimental-strip-types scripts/export-xmind.ts"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.3",
