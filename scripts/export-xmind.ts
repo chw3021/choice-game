@@ -52,6 +52,9 @@ function effectLabels(e: Effects | undefined): string[] {
     ...Object.entries(e.mods ?? {}).map(([name, v]) => `보정치(${name}) ${sign(v)}`),
     ...(e.flags ?? []).map(f => `획득: ${flagName(f)}`),
     ...(e.items ?? []).map(i => `아이템: ${flagName(i)}`),
+    ...(e.randomItem ? [`${e.randomItem.hidden ? '숨긴 ' : ''}무작위 아이템: ${e.randomItem.pool.map(flagName).join(', ')} 중 1개`] : []),
+    ...(e.reveal ? ['숨긴 아이템 공개'] : []),
+    ...(e.loseItems ? ['소지품 전부 잃음'] : []),
   ]
 }
 
@@ -68,17 +71,40 @@ function sceneTopic(id: string): Topic {
     .join('\n\n')
   const t = topic(sceneTitle(scene), { notes: { plain: { content: notes } } }, scene.ending ? 'ending' : undefined)
   sceneTopicIds.set(id, t.id)
-  const labels = effectLabels(scene.effects)
+  const labels = [
+    ...effectLabels(scene.effects),
+    ...Object.entries(scene.pick ?? {}).map(([group, count]) => `무작위 노출: ${group} 묶음 중 ${count}개`),
+  ]
   if (labels.length) t.labels = labels
-  const kids = scene.choices.map(choiceTopic)
+  // 전투 장면은 선택지 대신 승리/패배/시간 초과 결과로 펼친다
+  const { combat } = scene
+  const kids = combat
+    ? [
+        topic(`전투: ${combat.enemy.name} (체력 ${combat.enemy.hp}, 방어 ${combat.enemy.defense}${combat.turns ? `, ${combat.turns}턴 제한` : ''})`, {
+          children: {
+            attached: [
+              topic('승리', { children: { attached: [sceneTopic(combat.win)] } }, 'success'),
+              topic('패배', { children: { attached: [sceneTopic(combat.lose)] } }, 'fail'),
+              ...(combat.timeout ? [topic('시간 초과', { children: { attached: [sceneTopic(combat.timeout)] } }, 'fail')] : []),
+            ],
+          },
+        }),
+      ]
+    : scene.choices.map(choiceTopic)
   if (kids.length) t.children = { attached: kids }
   return t
 }
 
 function choiceTopic(c: Choice): Topic {
-  const check = c.target ? ` (${c.stat ? `${STAT_NAMES[c.stat]} 판정, ` : ''}목표 ${c.target})` : ''
+  const check = c.odds
+    ? ` (${STAT_NAMES[c.odds.stat]}${c.odds.plus ? ` +${c.odds.plus}` : ''}% 확률)`
+    : c.target
+      ? ` (${c.skill ? `${c.skill} 판정, ` : c.stat ? `${STAT_NAMES[c.stat]} 판정, ` : ''}목표 ${c.target})`
+      : ''
   const title = `${c.trait ? `[${c.trait}] ` : ''}${c.text}${check}`
   const labels = [
+    ...(c.when ? [`${STAT_NAMES[c.when.stat]} ${c.when.min ?? 0}~${c.when.max ?? 100}일 때`] : []),
+    ...(c.group ? [`무작위 묶음: ${c.group}`] : []),
     ...(c.requires ?? []).map(f => `필요: ${flagName(f)}`),
     ...(c.minOf ? [`필요: ${c.minOf.of.map(flagName).join(', ')} 중 ${c.minOf.count}개 이상`] : []),
     ...(c.excludes ?? []).map(f => `없어야 함: ${flagName(f)}`),
@@ -87,7 +113,7 @@ function choiceTopic(c: Choice): Topic {
   const t = topic(title, labels.length ? { labels } : {}, c.trait ? 'trait' : undefined)
   // 판정 선택지는 성공/실패 두 갈래로 펼친다
   const kids =
-    c.target === undefined
+    c.target === undefined && !c.odds
       ? [sceneTopic(c.next)]
       : [
           topic('성공', { children: { attached: [sceneTopic(c.next)] } }, 'success'),

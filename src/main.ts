@@ -4,7 +4,6 @@ import '@fontsource/noto-sans-kr/700.css'
 import '@fontsource/noto-sans-kr/900.css'
 import '@fontsource/noto-serif-kr/500.css'
 import './style.css'
-import battle from './assets/battle.png'
 import chevron from './assets/chevron.svg'
 import chevronActive from './assets/chevron-active.svg'
 import tabIndicator from './assets/tab-indicator.svg'
@@ -14,23 +13,26 @@ import {
   STAT_NAMES,
   choose,
   newGame,
+  oddsTarget,
   statLabel,
   tier,
   visibleChoices,
   type Block,
   type CheckResult,
+  type Choice,
   type GameState,
   type Scene,
+  type StatKey,
 } from './game/engine.ts'
 import { START, START_ITEMS, START_STATS, items, scenes } from './game/story.ts'
 
 const SAVE_KEY = 'choice-game:save'
 const SETTINGS_KEY = 'choice-game:settings'
-const images: Record<string, string> = { battle }
-// 화면·장면 삽화. 파일 이름이 장면 id(또는 title, loading, menu, settings)와 같다
+// 화면·장면 삽화. 파일 이름이 장면 id(또는 scene.image, title, loading, menu, settings)와 같고,
+// 대화 장면 초상화는 portrait-이름.jpg이다
 const art = import.meta.glob<string>('./assets/art/*.jpg', { eager: true, import: 'default' })
 const artOf = (name: string) => art[`./assets/art/${name}.jpg`]
-const sceneArt = (s: Scene) => (s.image ? images[s.image] : artOf(s.id))
+const sceneArt = (s: Scene) => artOf(s.portrait ? `portrait-${s.portrait}` : (s.image ?? s.id))
 const app = document.querySelector<HTMLDivElement>('#app')!
 
 // 글자당 ms. 0이면 타이핑 없이 바로 보여준다
@@ -54,19 +56,12 @@ let sheetDragged = false
 let diceOpen = false
 let typing: ReturnType<typeof setInterval> | undefined
 
-// 주사위 눈 위치 (3x3 격자 인덱스)
-const PIPS = [[], [4], [0, 8], [0, 4, 8], [0, 2, 6, 8], [0, 2, 4, 6, 8], [0, 2, 3, 5, 6, 8]]
-const face = (n: number) =>
-  Array.from({ length: 9 }, (_, i) => `<i${PIPS[n].includes(i) ? ' class="on"' : ''}></i>`).join('')
-
 function load(): GameState | undefined {
   try {
-    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null') as (GameState & { modifier?: number }) | null
-    // 스토리 수정으로 저장된 장면이 사라졌으면 새 게임으로 시작. 아이템 도입 전 저장은 빈 소지품으로,
-    // 출처별 보정 도입 전 저장은 합계 보정치 하나로 이어간다
-    if (!saved || !scenes[saved.sceneId]) return undefined
-    const { modifier, ...rest } = saved
-    return { ...rest, items: saved.items ?? [], mods: saved.mods ?? (modifier ? { 보정: modifier } : {}) }
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null') as GameState | null
+    // 스토리 수정으로 저장된 장면이 사라졌거나, d20·0~100 상태치 도입(seed 추가) 전 저장이면 새 게임으로 시작한다
+    if (!saved || !scenes[saved.sceneId] || saved.seed === undefined) return undefined
+    return saved
   } catch {
     return undefined
   }
@@ -190,21 +185,23 @@ function renderBlock(b: Block): string {
 
 function renderCheck(c: CheckResult): string {
   const mod = c.modifier ? ` ${c.modifier > 0 ? '+' : '-'} ${Math.abs(c.modifier)}` : ''
+  const kind = c.attack ? '공격' : '판정'
+  const result = c.attack ? (c.success ? '적중' : '빗나감') : c.success ? '성공' : '실패'
   return `<p class="check ${c.success ? 'ok' : 'fail'}">
-    판정 ${c.success ? '성공' : '실패'} · ${c.dice.join(' + ')}${mod} = ${c.total} (목표 ${c.target})
+    ${kind} ${result} · ${c.dice}${mod} = ${c.total} (${c.attack ? '방어' : '목표'} ${c.target})
   </p>`
 }
 
 function renderDice(c: CheckResult): string {
   return `<button class="dice-overlay${settings.diceMotion ? '' : ' still'}" data-dice aria-live="polite">
-    <span class="dice-title">판정 · 목표 ${c.target}</span>
-    <span class="dice">${c.dice.map(() => `<span class="die">${face(1)}</span>`).join('')}</span>
+    <span class="dice-title">${c.attack ? `공격 · 방어 ${c.target}` : `판정 · 목표 ${c.target}`}</span>
+    <span class="dice"><span class="die">1</span></span>
     <span class="breakdown">
-      <span><span>주사위 굴림</span><b>${c.dice[0] + c.dice[1]}</b></span>
+      <span><span>주사위 굴림</span><b>${c.dice}</b></span>
       ${c.parts
         .map(p => `<span><span>${p.label}</span><b class="${p.value > 0 ? 'up' : 'down'}">${p.value > 0 ? '+' : ''}${p.value}</b></span>`)
         .join('')}
-      <span class="check ${c.success ? 'ok' : 'fail'}">판정 ${c.success ? '성공' : '실패'} ${c.total}!</span>
+      <span class="check ${c.success ? 'ok' : 'fail'}">${c.attack ? (c.success ? '적중' : '빗나감') : `판정 ${c.success ? '성공' : '실패'}`} ${c.total}!</span>
     </span>
     <span class="dice-hint">화면을 눌러 계속하기</span>
   </button>`
@@ -213,12 +210,12 @@ function renderDice(c: CheckResult): string {
 // 주사위를 잠시 무작위로 굴린 뒤 실제 판정 값으로 멈춘다
 function rollDice(c: CheckResult) {
   const overlay = app.querySelector<HTMLElement>('.dice-overlay')!
-  const dice = [...overlay.querySelectorAll<HTMLElement>('.die')]
+  const die = overlay.querySelector<HTMLElement>('.die')!
   const reduce = !settings.diceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches
   const end = Date.now() + (reduce ? 0 : 900)
   const timer = setInterval(() => {
     const done = Date.now() >= end
-    dice.forEach((d, i) => (d.innerHTML = face(done ? c.dice[i] : 1 + Math.floor(Math.random() * 6))))
+    die.textContent = String(done ? c.dice : 1 + Math.floor(Math.random() * 20))
     if (done) {
       clearInterval(timer)
       overlay.classList.add('done')
@@ -232,11 +229,39 @@ function choiceButton(attr: string, label: string, highlight: boolean): string {
   </button>`
 }
 
-// 상태 표기 구간(0-2, 3-5, 6-7, 8-10)별 굵기. 14px에서도 단계가 구분되도록 간격을 벌린다
+const skilled = (c: Choice) => Boolean(c.skill) && state.flags.includes(`skill:${c.skill}`)
+
+// 기술 판정은 마인드맵 표기([화술 10])를 따르고, 확률 판정은 현재 상태치로 계산한 성공 확률을 붙인다
+function choiceLabel(c: Choice): string {
+  const text = c.skill ? `[${c.skill} ${c.target}] ${c.text}` : c.text
+  const suffix = c.odds
+    ? ` (성공 확률 ${(21 - oddsTarget(state, c.odds)) * 5}%)`
+    : c.target !== undefined && !c.skill
+      ? ` (난이도 ${c.target})`
+      : ''
+  return `${c.trait ? `<b>[${c.trait}] ${text}</b>` : text}${suffix}`
+}
+
+function renderCombat(scene: Scene): string {
+  const combat = scene.combat
+  const current = state.combat
+  if (!combat || !current) return ''
+  const { enemy, turns } = combat
+  return `<div class="combat">
+    <div class="combat-head"><b>${enemy.name}</b><span>${current.turn}${turns ? ` / ${turns}` : ''}턴</span></div>
+    <div class="combat-hp" role="img" aria-label="남은 체력 ${current.hp} / ${enemy.hp}">
+      ${Array.from({ length: enemy.hp }, (_, i) => `<i${i < current.hp ? ' class="on"' : ''}></i>`).join('')}
+    </div>
+    ${current.log.map(line => `<p>${line}</p>`).join('')}
+  </div>`
+}
+
+// 상태 표기 구간별 굵기. 14px에서도 단계가 구분되도록 간격을 벌린다
 const STAT_WEIGHTS = [400, 500, 700, 900]
-const statWeight = (v: number) => STAT_WEIGHTS[tier(v)]
-// 상태치 0~10을 색상환 빨강(0)~초록(120)에 비례시킨다
-const statColor = (v: number) => `hsl(${Math.round((v / STAT_MAX) * 120)} 55% 62%)`
+const statWeight = (k: StatKey, v: number) => STAT_WEIGHTS[tier(k, v)]
+// 체력·정신력·위생은 0~100을 색상환 빨강(0)~초록(120)에 비례시키고, 상한이 없는 돈은 구간으로 정한다
+const statColor = (k: StatKey, v: number) =>
+  `hsl(${k === 'money' ? tier(k, v) * 40 : Math.round((v / STAT_MAX) * 120)} 55% 62%)`
 
 function renderSheet(): string {
   const entry = (id: string) => `<b>${items[id].name}</b><small>${items[id].desc}</small>`
@@ -246,8 +271,8 @@ function renderSheet(): string {
       <button class="status" data-status aria-expanded="${statsOpen}" aria-label="상태와 소지품 보기">
         <img class="handle" src="${tabIndicator}" width="69" height="3" alt="">
         ${STAT_KEYS.map(
-          k => `<span class="${k === state.lastStat ? 'active' : ''}" style="font-weight: ${statWeight(state.stats[k])}; color: ${statColor(state.stats[k])}">
-            ${statLabel(k, state.stats[k])}<small>${STAT_NAMES[k]} ${state.stats[k]}/${STAT_MAX}</small>
+          k => `<span class="${k === state.lastStat ? 'active' : ''}" style="font-weight: ${statWeight(k, state.stats[k])}; color: ${statColor(k, state.stats[k])}">
+            ${statLabel(k, state.stats[k])}<small>${STAT_NAMES[k]} ${state.stats[k]}${k === 'money' ? '닢' : `/${STAT_MAX}`}</small>
           </span>`,
         ).join('')}
       </button>
@@ -322,24 +347,21 @@ function render() {
     return
   }
   const scene = scenes[state.sceneId]
-  const choices = visibleChoices(scene, state).map((c, i) =>
-    choiceButton(
-      `data-i="${i}"`,
-      `${c.trait ? `<b>[${c.trait}] ${c.text}</b>` : c.text}${c.target ? ` (목표: ${c.target})` : ''}`,
-      Boolean(c.trait),
-    ),
+  const choices = visibleChoices(scene, state, items).map((c, i) =>
+    choiceButton(`data-i="${i}"`, choiceLabel(c), Boolean(c.trait) || skilled(c)),
   )
   if (scene.ending) choices.push(choiceButton('data-restart', '처음부터 다시 하기', false))
 
   const image = sceneArt(scene)
   app.innerHTML = `
-    ${image ? `<div class="art"><img src="${image}" alt=""></div>` : ''}
+    ${image ? `<div class="art${scene.portrait ? ' portrait' : ''}"><img src="${image}" alt=""></div>` : ''}
     ${renderHud(['menu', 'settings'])}
     <main class="story">
       <div class="text">
         ${lastCheck ? renderCheck(lastCheck) : ''}
         ${scene.ending ? `<h1 class="ending">엔딩 · ${scene.ending}</h1>` : ''}
         ${scene.blocks.map(renderBlock).join('')}
+        ${renderCombat(scene)}
       </div>
       <div class="choices${!(diceOpen && lastCheck) && canType() ? ' pending' : ''}">${choices.join('')}</div>
     </main>
@@ -411,7 +433,7 @@ app.addEventListener('click', e => {
   if (btn.dataset.restart !== undefined) {
     resetGame()
   } else {
-    const choice = visibleChoices(scenes[state.sceneId], state)[Number(btn.dataset.i)]
+    const choice = visibleChoices(scenes[state.sceneId], state, items)[Number(btn.dataset.i)]
     const result = choose(state, choice, scenes, Math.random, items)
     state = result.state
     lastCheck = result.check
