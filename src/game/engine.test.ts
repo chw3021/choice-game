@@ -6,8 +6,7 @@ import { items, scenes, START, START_ITEMS, START_STATS } from './story.ts'
 
 const artExists = (name: string) => existsSync(new URL(`../assets/art/${name}.jpg`, import.meta.url))
 
-// 신규 장면 삽화·초상화 생성 전까지 todo로 둔다. 그림을 추가하면 todo 옵션을 제거한다
-test('모든 장면은 삽화(image 또는 장면 id) 또는 초상화(portrait-이름) 파일이 있다', { todo: '신규 삽화 29장 미생성' }, () => {
+test('모든 장면은 삽화(image 또는 장면 id) 또는 초상화(portrait-이름) 파일이 있다', () => {
   const missing = Object.values(scenes)
     .map(s => (s.portrait ? `portrait-${s.portrait}` : (s.image ?? s.id)))
     .filter(name => !artExists(name))
